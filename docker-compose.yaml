@@ -1,0 +1,164 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: postgres
+    restart: always
+    environment:
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
+      - POSTGRES_DB=airflow
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+      - ./db-init/postgresql:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow"]
+      interval: 5s
+      retries: 5
+    networks:
+      - airflow-net
+  cassandra_db:
+    image: cassandra:latest
+    container_name: cassandra
+    hostname: cassandra
+    ports:
+      - "9042:9042"
+    environment:
+      - MAX_HEAP_SIZE=512M
+      - HEAP_NEWSIZE=100M
+      - CASSANDRA_USERNAME=cassandra
+      - CASSANDRA_PASSWORD=cassandra
+    volumes:
+      - ./data/cassandra:/var/lib/cassandra
+      - ./db-init/cassandra:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "nodetool status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - airflow-net
+  airflow-init:
+    image: apache/airflow:2.10.5-python3.11
+    container_name: airflow-init
+    user: "0:0" 
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+      - AIRFLOW__WEBSERVER__SECRET_KEY= 'airflow'
+      - JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64  # Điều chỉnh theo thực tế
+      - SPARK_HOME=/opt/spark
+    volumes:
+      - spark:/opt/spark
+      - java:/usr/lib/jvm/java-17-openjdk-amd64
+      - ./dags:/opt/airflow/dags
+      - ./plugins:/opt/airflow/plugins
+      - ./logs:/opt/airflow/logs
+      - ./.venv/lib/python3.11/site-packages/:/home/airflow/.local/lib/python3.11/site-packages
+    command: bash -c "airflow db migrate && airflow users create --username airflow --password airflow --firstname airflow --lastname airflow --role Admin --email airflow@airflow.com"
+    networks:
+      - airflow-net
+
+  airflow-webserver:
+    image: apache/airflow:2.10.5-python3.11
+    container_name: airflow-webserver
+    restart: always
+    user: "0:0" 
+    depends_on:
+      postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+    environment:
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__WEBSERVER__SECRET_KEY= 'airflow'
+      - JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64  # Điều chỉnh theo thực tế
+      - SPARK_HOME=/opt/spark
+    volumes:
+      - spark:/opt/spark
+      - java:/usr/lib/jvm/java-17-openjdk-amd64
+      - ./dags:/opt/airflow/dags
+      - ./plugins:/opt/airflow/plugins
+      - ./logs:/opt/airflow/logs
+      - ./.venv/lib/python3.11/site-packages/:/home/airflow/.local/lib/python3.11/site-packages
+    ports:
+      - 8080:8080
+    command: webserver
+    networks:
+      - airflow-net
+
+  airflow-scheduler:
+    image: apache/airflow:2.10.5-python3.11
+    container_name: airflow-scheduler
+    user: "0:0" 
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+    environment:
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__WEBSERVER__SECRET_KEY= 'airflow'
+      - JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64  # Điều chỉnh theo thực tế
+      - SPARK_HOME=/opt/spark
+      
+    volumes:
+      - spark:/opt/spark
+      - java:/usr/lib/jvm/java-17-openjdk-amd64
+      - ./dags:/opt/airflow/dags
+      - ./plugins:/opt/airflow/plugins
+      - ./logs:/opt/airflow/logs
+      - ./.venv/lib/python3.11/site-packages/:/home/airflow/.local/lib/python3.11/site-packages
+    command: scheduler
+    networks:
+      - airflow-net
+  spark-master:
+    image: bitnami/spark:3.5.0
+    container_name: spark-master
+    restart: always
+    environment:
+      - SPARK_MODE=master
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+    ports:
+      - 8081:8080
+      - 7077:7077
+    volumes:
+      - spark:/opt/bitnami/spark
+      - java:/opt/bitnami/java
+    networks:
+      - airflow-net
+  spark-worker:
+    image: bitnami/spark:3.5.0
+    container_name: spark-worker
+    restart: always
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_MEMORY=1G
+      - SPARK_WORKER_CORES=1
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+    depends_on:
+      - spark-master
+    volumes:
+      - spark:/opt/bitnami/spark
+      - java:/opt/bitnami/java
+    networks:
+      - airflow-net
+networks:
+  airflow-net:
+    driver: bridge
+volumes:
+  spark:
+  java:
