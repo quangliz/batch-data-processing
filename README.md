@@ -74,7 +74,7 @@ This project demonstrates a robust data pipeline that:
 
 1. Clone the repository:
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/quangliz/batch-data-processing.git
    cd batch-data-processing
    ```
 2. Install packages:
