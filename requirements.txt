@@ -1,6 +1,6 @@
 #venv: python3.11, docker: 3.8
 # i hate writing ts, even AI cannot help me
-apache-airflow==2.10.4
+apache-airflow==2.10.5
 requests==2.32.3
 cassandra-driver==3.29.2
 pyspark==3.5.0

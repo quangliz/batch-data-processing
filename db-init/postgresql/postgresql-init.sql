@@ -13,11 +13,11 @@ CREATE TABLE IF NOT EXISTS users (
     processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Table to track extraction metadata
-CREATE TABLE IF NOT EXISTS extraction_metadata (
+-- Table to track load operations metadata
+CREATE TABLE IF NOT EXISTS load_metadata (
     id SERIAL PRIMARY KEY,
-    timestamp TIMESTAMP,
-    records_count INTEGER,
+    load_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    records_loaded INTEGER,
     status VARCHAR(50)
 );
 
